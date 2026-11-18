@@ -1,0 +1,137 @@
+# DRWP local stack (ADR 004: Compose trước, Kubernetes sau)
+#   docker compose -f infrastructure/compose/docker-compose.yml up -d                 # postgres (+ cụm B) + keycloak
+#   ... --profile files up -d                                                            # + MinIO
+#   ... --profile events up -d                                                           # + Kafka + Debezium Connect
+#   ... --profile app up -d --build                                                      # + business-app (api, event-worker, scheduled-worker)
+name: drwp
+
+x-db-env: &db-env
+  POSTGRES_USER: drwp
+  POSTGRES_PASSWORD: ${DRWP_DB_PASSWORD:-drwp}
+  POSTGRES_DB: drwp
+
+services:
+  postgres-a:
+    image: postgres:16-alpine
+    environment: *db-env
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    ports: ["5432:5432"]
+    volumes:
+      - pg-a:/var/lib/postgresql/data
+      - ../postgres/init-keycloak-db.sql:/docker-entrypoint-initdb.d/10-keycloak.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drwp -d drwp"]
+      interval: 5s
+      retries: 20
+
+  # Cụm thứ hai để thử tenant placement trên cụm khác (spike Phase 1)
+  postgres-b:
+    image: postgres:16-alpine
+    environment: *db-env
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    ports: ["5433:5432"]
+    volumes: [pg-b:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drwp -d drwp"]
+      interval: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm", "--http-port=8180"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-a:5432/keycloak
+      KC_DB_USERNAME: drwp
+      KC_DB_PASSWORD: ${DRWP_DB_PASSWORD:-drwp}
+      KC_HOSTNAME: http://localhost:8180
+    ports: ["8180:8180"]
+    volumes:
+      - ../keycloak/drwp-realm.json:/opt/keycloak/data/import/drwp-realm.json:ro
+    depends_on:
+      postgres-a: { condition: service_healthy }
+
+  minio:
+    profiles: ["files", "app"]
+    image: minio/minio:latest   # ghim phiên bản cụ thể trước khi dùng ngoài môi trường dev
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-drwpminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-drwpminio-secret}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio:/data]
+
+  kafka:
+    profiles: ["events", "app"]
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports: ["29092:29092"]
+
+  connect:
+    profiles: ["events", "app"]
+    image: quay.io/debezium/connect:3.0
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: drwp-connect
+      CONFIG_STORAGE_TOPIC: drwp_connect_configs
+      OFFSET_STORAGE_TOPIC: drwp_connect_offsets
+      STATUS_STORAGE_TOPIC: drwp_connect_status
+    ports: ["8083:8083"]
+    depends_on: [kafka, postgres-a]
+
+  # ---- business-app theo runtime role (ADR 018) ----
+  api:
+    profiles: ["app"]
+    build: { context: ../.., dockerfile: business-app/Dockerfile }
+    environment: &app-env
+      SPRING_PROFILES_ACTIVE: api,cluster-b
+      DRWP_DB_A_URL: jdbc:postgresql://postgres-a:5432/drwp
+      DRWP_DB_A_PASSWORD: ${DRWP_DB_PASSWORD:-drwp}
+      DRWP_DB_B_URL: jdbc:postgresql://postgres-b:5432/drwp
+      DRWP_DB_B_PASSWORD: ${DRWP_DB_PASSWORD:-drwp}
+      DRWP_OIDC_ISSUER: http://localhost:8180/realms/drwp
+      DRWP_FILE_STORAGE: minio
+      DRWP_MINIO_ENDPOINT: http://minio:9000
+      DRWP_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-drwpminio}
+      DRWP_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-drwpminio-secret}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # JWT issuer phải khớp claim iss (localhost:8180) trong khi container gọi keycloak nội bộ:
+      DRWP_SECURITY_JWKSETURI: http://keycloak:8180/realms/drwp/protocol/openid-connect/certs
+    ports: ["8080:8080"]
+    depends_on:
+      postgres-a: { condition: service_healthy }
+      postgres-b: { condition: service_healthy }
+
+  event-worker:
+    profiles: ["app"]
+    build: { context: ../.., dockerfile: business-app/Dockerfile }
+    environment:
+      <<: *app-env
+      SPRING_PROFILES_ACTIVE: event-worker,cluster-b
+    depends_on: [api, kafka]
+
+  scheduled-worker:
+    profiles: ["app"]
+    build: { context: ../.., dockerfile: business-app/Dockerfile }
+    environment:
+      <<: *app-env
+      SPRING_PROFILES_ACTIVE: scheduled-worker,cluster-b
+    depends_on: [api]
+
+volumes:
+  pg-a: {}
+  pg-b: {}
+  minio: {}

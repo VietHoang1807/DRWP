@@ -1,0 +1,11 @@
+target/
+*.iml
+.idea/
+.vscode/
+.DS_Store
+data/
+business-app/data/
+.env
+*.log
+platform/*/target/
+frontend/node_modules/

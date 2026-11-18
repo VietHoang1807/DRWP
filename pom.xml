@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>vn.drwp</groupId>
+    <artifactId>drwp-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>DRWP :: Dynamic Record &amp; Workflow Platform</name>
+
+    <properties>
+        <java.version>25</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-modulith.version>2.1.2</spring-modulith.version>
+        <shedlock.version>7.11.0</shedlock.version>
+        <archunit.version>1.5.1</archunit.version>
+        <minio.version>9.0.4</minio.version>
+        <!-- okhttp 5.x: artifact `okhttp` trên Maven là gói KMP rỗng; Maven phải dùng `okhttp-jvm` -->
+        <okhttp.version>5.1.0</okhttp.version>
+    </properties>
+
+    <modules>
+        <module>platform/platform-kernel</module>
+        <module>platform/platform-core</module>
+        <module>platform/platform-web</module>
+        <module>modules/tenant</module>
+        <module>modules/identity</module>
+        <module>modules/metadata</module>
+        <module>modules/record</module>
+        <module>modules/workflow</module>
+        <module>modules/file</module>
+        <module>modules/notification</module>
+        <module>modules/audit</module>
+        <module>business-app</module>
+        <!-- gateway-app: chưa triển khai (ADR 013). Xem gateway-app/README.md -->
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-bom</artifactId>
+                <version>${spring-modulith.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit</artifactId>
+                <version>${archunit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.javacrumbs.shedlock</groupId>
+                <artifactId>shedlock-spring</artifactId>
+                <version>${shedlock.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.javacrumbs.shedlock</groupId>
+                <artifactId>shedlock-provider-jdbc-template</artifactId>
+                <version>${shedlock.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>com.squareup.okhttp3</groupId>
+                        <artifactId>okhttp</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp-jvm</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+
+            <!-- internal artifacts -->
+            <dependency><groupId>vn.drwp</groupId><artifactId>platform-kernel</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>platform-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>platform-web</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-tenant</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-identity</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-metadata</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-record</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-workflow</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-file</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-notification</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>vn.drwp</groupId><artifactId>module-audit</artifactId><version>${project.version}</version></dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-java</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion><version>[25,)</version></requireJavaVersion>
+                                <requireMavenVersion><version>[3.9,)</version></requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

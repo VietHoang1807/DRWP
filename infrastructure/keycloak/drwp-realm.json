@@ -1,0 +1,167 @@
+{
+  "realm": "drwp",
+  "enabled": true,
+  "displayName": "DRWP",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      {
+        "name": "platform-admin",
+        "description": "Quản trị nền tảng DRWP (provision tenant)"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "drwp-api",
+      "name": "DRWP Business API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "drwp-web",
+      "name": "DRWP Web (React)",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-drwp-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "drwp-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "drwp-cli",
+      "name": "DRWP CLI (chỉ dev: password grant)",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "audience-drwp-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "drwp-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "username": "platform-admin",
+      "enabled": true,
+      "email": "platform-admin@drwp.local",
+      "emailVerified": true,
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "platform-admin"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "username": "tenant-admin",
+      "enabled": true,
+      "email": "tenant-admin@drwp.local",
+      "emailVerified": true,
+      "firstName": "Tenant",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a2",
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@drwp.local",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Nguyen",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a3",
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@drwp.local",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Tran",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a4",
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@drwp.local",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Le",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

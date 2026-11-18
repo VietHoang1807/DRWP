@@ -1,0 +1,174 @@
+spring:
+  application:
+    name: drwp-business-app
+  threads:
+    virtual:
+      enabled: true
+  # DataSource/transaction managers do platform-core tự khai báo (định tuyến theo tenant)
+  sql:
+    init:
+      mode: never
+  flyway:
+    enabled: false            # Flyway chạy theo từng schema bởi TenantSchemaMigrator / ControlPlaneSchemaInitializer
+  modulith:
+    events:
+      jdbc:
+        schema-initialization:
+          enabled: false      # bảng event_publication do migration của từng schema tenant tạo (ADR 019)
+      republish-outstanding-events-on-restart: false  # phát lại theo tenant bằng job (ADR 019)
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    listener:
+      ack-mode: record
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,modulith
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    db:
+      enabled: false          # DataSource chính cần tenant context; dùng health "controlPlane"
+
+drwp:
+  runtime:
+    roles: ${DRWP_RUNTIME_ROLES:api,event-worker,scheduled-worker}
+  tenancy:
+    control-plane:
+      cluster: cluster-a
+      schema: platform
+      pool-size: 5
+    default-cluster: cluster-a
+    clusters:
+      cluster-a:
+        url: ${DRWP_DB_A_URL:jdbc:postgresql://localhost:5432/drwp}
+        username: ${DRWP_DB_A_USER:drwp}
+        password: ${DRWP_DB_A_PASSWORD:drwp}
+        pool-size: 20
+    placement-cache-ttl: 30s
+    strict: true
+    migrate-on-startup: true
+  security:
+    issuer-uri: ${DRWP_OIDC_ISSUER:http://localhost:8180/realms/drwp}
+    audience: drwp-api
+    tenant-header: X-Tenant-Id
+    dev:
+      enabled: false
+  events:
+    replay-older-than: 5m
+    replay-interval: PT1M
+    registry-backlog-warn-threshold: 100
+    outbox-retention: 7d
+  file:
+    storage: ${DRWP_FILE_STORAGE:filesystem}
+    base-dir: ${DRWP_FILE_DIR:./data/files}
+    max-size: 20MB
+    minio:
+      endpoint: ${DRWP_MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${DRWP_MINIO_ACCESS_KEY:}
+      secret-key: ${DRWP_MINIO_SECRET_KEY:}
+      bucket: drwp-files
+
+logging:
+  pattern:
+    level: "%5p [tenant=%X{tenant:-},corr=%X{correlationId:-}]"
+
+---
+# Phát triển cục bộ: all-in-one + token HS256 (POST /dev/token). KHÔNG dùng ở production.
+spring:
+  config:
+    activate:
+      on-profile: dev
+drwp:
+  runtime:
+    roles: api,scheduled-worker
+  security:
+    dev:
+      enabled: true
+      secret: ${DRWP_DEV_JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
+      issuer: drwp-dev
+
+---
+# Bật cụm PostgreSQL thứ hai để đặt tenant ở cụm khác (tenant placement)
+spring:
+  config:
+    activate:
+      on-profile: cluster-b
+drwp:
+  tenancy:
+    clusters:
+      cluster-b:
+        url: ${DRWP_DB_B_URL:jdbc:postgresql://localhost:5433/drwp}
+        username: ${DRWP_DB_B_USER:drwp}
+        password: ${DRWP_DB_B_PASSWORD:drwp}
+        pool-size: 20
+
+---
+# ADR 018: vai trò API — HTTP bật, Kafka listener tắt
+spring:
+  config:
+    activate:
+      on-profile: api
+drwp:
+  runtime:
+    roles: api
+
+---
+# ADR 018: event-worker — chỉ Kafka listener + actuator
+spring:
+  config:
+    activate:
+      on-profile: event-worker
+server:
+  port: ${SERVER_PORT:8081}
+drwp:
+  runtime:
+    roles: event-worker
+  tenancy:
+    migrate-on-startup: false
+
+---
+# ADR 018: scheduled-worker — job định kỳ có ShedLock
+spring:
+  config:
+    activate:
+      on-profile: scheduled-worker
+server:
+  port: ${SERVER_PORT:8082}
+drwp:
+  runtime:
+    roles: scheduled-worker
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+drwp:
+  security:
+    dev:
+      enabled: false
