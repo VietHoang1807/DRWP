@@ -1,0 +1,35 @@
+{
+  "name": "fe",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "build": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
+    "lint": "node ./node_modules/oxlint/bin/oxlint src e2e scripts --ignore-pattern \"src/vendor/**\"",
+    "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "seed": "node scripts/seed.mjs",
+    "e2e": "playwright test",
+    "e2e:landing": "playwright test e2e/landing.spec.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.108.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router": "^8.5.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "autoprefixer": "^10.6.1",
+    "oxlint": "^1.81.0",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^6.2.7"
+  }
+}
